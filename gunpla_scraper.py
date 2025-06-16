@@ -2,119 +2,142 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 import time
 import random
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.common.by import By
+import time
+import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+import logging
+from tqdm import tqdm
 
-gundam_data = {}
-texts = []
-h3_tags = ["Articulation", "Weapons/Other Gimmicks", "Customizing-based Tips"]
-h2_tags = ["Includes", "Tips & Tricks", "Variants", "Notes & Trivia"]
-
-
-driver = webdriver.Firefox()
-driver.get(
-    "https://breezewiki.com/gunpla/wiki/MG_MSN-06S-2_Sinanju_Stein_(Narrative_Ver.)_(Ver._Ka)"
+# options.add_argument("--disable-gpu")
+logging.basicConfig(
+    filename="gunpla.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-side_profile = driver.find_elements(By.CSS_SELECTOR, "div.pi-item")
 
-for item in side_profile:
+def scrape_gunpla_prod_data(url):
 
-    gundam_data[item.find_element(By.CSS_SELECTOR, "h3").text] = item.find_element(
-        By.CSS_SELECTOR, "div.pi-data-value"
-    ).text
+    options = Options()
+    options.add_argument("--headless")
+    options.set_preference(
+        "general.useragent.override",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    )
+    driver = webdriver.Firefox(options=options)
 
+    gunpla_data = {}
 
-def scrape_gallery_pics(gundam_data):
-    gallery = driver.find_elements(By.CSS_SELECTOR, "div.wikia-gallery")
+    try:
+        driver.get(url)
+        time.sleep(3)
 
-    images = []
-    real_images = []
+        title = driver.find_element(By.CSS_SELECTOR, "h1#firstHeading").text
+        logging.info(f"Title: {title}")
+        logging.info(f"URL: {url}")
 
-    for picture in gallery:
-        gallery_files = picture.find_elements(By.CSS_SELECTOR, "a.image")
-        images.extend(list(map(lambda x: x.get_attribute("href"), gallery_files)))
+        gunpla_data["URL"] = url
+        # 📋 Scrape infobox key–value pairs
+        infobox = driver.find_element(By.CSS_SELECTOR, "aside.portable-infobox")
+        entries = infobox.find_elements(By.CSS_SELECTOR, ".pi-item")
+        # print("\nInfobox entries:")
+        for entry in entries:
+            # Fields often come as label + value
+            label_elems = entry.find_elements(By.CSS_SELECTOR, ".pi-data-label")
+            value_elems = entry.find_elements(By.CSS_SELECTOR, ".pi-data-value")
+            if label_elems and value_elems:
+                label = label_elems[0].text.strip()
+                value = value_elems[0].text.strip()
+                gunpla_data[label] = value
 
-    for image in images:
-        driver.get(image)
-        real_images.append(
-            driver.find_element(By.CSS_SELECTOR, "div.page")
-            .find_element(By.CSS_SELECTOR, "img")
-            .get_attribute("src")
-        )
-        time.sleep(random.randint(1, 4))
+        h2_tags = ["Includes", "Tips_&_Tricks", "Variants", "Notes_&_Trivia"]
+        h3_tags = [
+            "Articulation",
+            "Weapons/Other_Gimmicks",
+            "Customizing-based_Tips",
+            "B-Club_related_customizations",
+        ]
 
-    gundam_data["images"] = real_images
+        for tags in h2_tags:
+            try:
+                heading = driver.find_element(By.XPATH, f"//h2[span[@id='{tags}']]")
+                heading_text = heading.find_element(By.XPATH, "following-sibling::*[1]")
 
-
-def scrape_h2_tags(tags, gundam_data):
-
-    for i, tag in enumerate(tags):
-
-        test_pro = driver.find_element(
-            By.XPATH,
-            f"/html/body/div[2]/div[2]/main/div[2]/div/div/h2[{i+1}]/span[@class='mw-headline']",
-        )
-
-        # print(test_pro.text)
-        if test_pro.text in tags:
-            for sibling in range(1, 6):
-                text_values = driver.find_element(
-                    By.XPATH,
-                    f"/html/body/div[2]/div[2]/main/div[2]/div/div/h2[{i+1}]/following-sibling::*[{sibling}]",
+            except Exception:
+                continue
+            finally:
+                gunpla_data[heading.text] = str.replace(
+                    str.replace(heading_text.text.strip(), "\n", " - "),
+                    "...",
+                    "",
                 )
-                reg = text_values.find_elements(By.CSS_SELECTOR, "li")
-                if len(reg) != 0:
-                    break
 
-        gundam_data[tag] = list(
-            map(
-                lambda x: str.replace(str.replace(x.text, "\n", " - "), "...", ""),
-                reg,
-            )
-        )
+        for tags in h3_tags:
+            try:
+                heading = driver.find_element(By.XPATH, f"//h3[span[@id='{tags}']]")
+                heading_text = heading.find_element(By.XPATH, "following-sibling::*[1]")
 
-
-def scrape_h3_tags(tags, gundam_data):
-
-    for i, tag in enumerate(tags):
-
-        test_pro = driver.find_element(
-            By.XPATH,
-            f"/html/body/div[2]/div[2]/main/div[2]/div/div/h3[{i+1}]/span[@class='mw-headline']",
-        )
-
-        # print(test_pro.text)
-        if test_pro.text in tags:
-            for sibling in range(1, 6):
-                text_values = driver.find_element(
-                    By.XPATH,
-                    f"/html/body/div[2]/div[2]/main/div[2]/div/div/h3[{i+1}]/following-sibling::*[{sibling}]",
+            except Exception:
+                continue
+            finally:
+                gunpla_data[heading.text] = str.replace(
+                    str.replace(heading_text.text.strip(), "\n", " - "),
+                    "...",
+                    "",
                 )
-                reg = text_values.find_elements(By.CSS_SELECTOR, "li")
-                if len(reg) != 0:
-                    break
 
-        gundam_data[tag] = list(
-            map(
-                lambda x: str.replace(str.replace(x.text, "\n", " - "), "...", ""),
-                reg,
+        gallery = driver.find_elements(By.CSS_SELECTOR, ".wikia-gallery")
+
+        images = []
+        real_images = []
+
+        for picture in gallery:
+            gallery_files = picture.find_elements(By.CSS_SELECTOR, "a.image")
+            images.extend(list(map(lambda x: x.get_attribute("href"), gallery_files)))
+
+        for image in images:
+            driver.get(image)
+            real_images.append(
+                driver.find_element(By.CSS_SELECTOR, "div.page")
+                .find_element(By.CSS_SELECTOR, "img")
+                .get_attribute("src")
             )
-        )
+            time.sleep(random.randint(1, 4))
+
+        gunpla_data["image_data"] = real_images
+        logging.info(f"Successfully retrieved {url}")
+    except Exception:
+        logging.error(f"Successfully retrieved {url}")
+        driver.quit()
+        return []
+        # print(gunpla_data)
+    finally:
+        driver.quit()
+        return gunpla_data
 
 
-scrape_h2_tags(h2_tags, gundam_data)
-scrape_h3_tags(h3_tags, gundam_data)
-scrape_gallery_pics(gundam_data)
-print(gundam_data)
-# test_pro =
+if __name__ == "__main__":
 
-# text_pro = driver.find_elements(By.CSS_SELECTOR, "h3")
+    full_gunpla_data = []
 
-# for tx in text_pro:
-#     print(tx.text)
-# lists = test_pro.find_elements(By.CSS_SELECTOR, "li")
-"""
-    For text,
-    - Everything in li should be a single sentence
-    - After '...', then join the nested points with it
-    - Each sentence combined should contain a . after it    
-"""
+    with open("gunpla_links.txt", "r+") as file:
+
+        # for product_link in file.readlines()[:2]:
+        #     full_gunpla_data.append(scrape_gunpla_prod_data(product_link.strip()))
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_url = [
+                executor.submit(scrape_gunpla_prod_data, url.strip())
+                for url in file.readlines()
+            ]
+            for future in as_completed(future_to_url):
+                full_gunpla_data.append(future.result())
+
+    with open("gunpla_data.json", "w+") as file:
+        file.writelines(json.dumps(full_gunpla_data))
+
+    # scrape_gunpla_prod_data()
