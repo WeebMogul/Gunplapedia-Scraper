@@ -3,7 +3,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.common.exceptions import NoSuchElementException
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from gunpla_scraper import scrape_gunpla_prod_data
 import time
+import json
 import random
 
 options = Options()
@@ -70,10 +72,23 @@ def img_link_scraper(url):
     )
 
 
-gunpla_links = []
+if __name__ == "__main__":
+    gunpla_links = []
+    full_gunpla_data = []
 
-for link in links:
-    gunpla_links.extend(img_link_scraper(link))
+    for link in links:
+        gunpla_links.extend(img_link_scraper(link))
 
-with open("gunpla_links.txt", "w+") as file:
-    file.writelines(gunpla_links)
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_to_url = [
+            executor.submit(scrape_gunpla_prod_data, url.strip())
+            for url in gunpla_links
+        ]
+        for future in as_completed(future_to_url):
+            full_gunpla_data.append(future.result())
+
+    with open("gunpla_data.json", "w+") as file:
+        file.writelines(json.dumps(full_gunpla_data))
+
+    # with open("gunpla_links.txt", "w+") as file:
+    #     file.writelines(gunpla_links)

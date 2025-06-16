@@ -13,6 +13,8 @@ import logging
 from tqdm import tqdm
 
 # options.add_argument("--disable-gpu")
+
+# Track scraping data success / failures
 logging.basicConfig(
     filename="gunpla.log",
     level=logging.INFO,
@@ -90,6 +92,7 @@ def scrape_gunpla_prod_data(url):
                     "",
                 )
 
+        # gather image links from the gallery
         gallery = driver.find_elements(By.CSS_SELECTOR, ".wikia-gallery")
 
         images = []
@@ -114,7 +117,6 @@ def scrape_gunpla_prod_data(url):
         logging.error(f"Successfully retrieved {url}")
         driver.quit()
         return []
-        # print(gunpla_data)
     finally:
         driver.quit()
         return gunpla_data
@@ -122,22 +124,7 @@ def scrape_gunpla_prod_data(url):
 
 if __name__ == "__main__":
 
-    full_gunpla_data = []
+    sample_url = "https://breezewiki.nadeko.net/gunpla/wiki/HGRFV_RX-78(G)E_Gundam_EX"
 
-    with open("gunpla_links.txt", "r+") as file:
-
-        # for product_link in file.readlines()[:2]:
-        #     full_gunpla_data.append(scrape_gunpla_prod_data(product_link.strip()))
-
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            future_to_url = [
-                executor.submit(scrape_gunpla_prod_data, url.strip())
-                for url in file.readlines()
-            ]
-            for future in as_completed(future_to_url):
-                full_gunpla_data.append(future.result())
-
-    with open("gunpla_data.json", "w+") as file:
-        file.writelines(json.dumps(full_gunpla_data))
-
+    sample_data = scrape_gunpla_prod_data(sample_url)
     # scrape_gunpla_prod_data()
